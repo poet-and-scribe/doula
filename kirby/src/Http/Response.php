@@ -6,7 +6,6 @@ use Closure;
 use Exception;
 use Kirby\Exception\LogicException;
 use Kirby\Filesystem\F;
-use Stringable;
 
 /**
  * Representation of an Http response,
@@ -19,7 +18,7 @@ use Stringable;
  * @copyright Bastian Allgeier
  * @license   https://opensource.org/licenses/MIT
  */
-class Response implements Stringable
+class Response
 {
 	/**
 	 * Store for all registered headers,
@@ -75,7 +74,7 @@ class Response implements Stringable
 		$this->charset = $charset ?? 'UTF-8';
 
 		// automatic mime type detection
-		if (str_contains($this->type, '/') === false) {
+		if (strpos($this->type, '/') === false) {
 			$this->type = F::extensionToMime($this->type) ?? 'text/html';
 		}
 	}
@@ -135,7 +134,7 @@ class Response implements Stringable
 		array $props = []
 	): static {
 		if (file_exists($file) === false) {
-			throw new Exception(message: 'The file could not be found');
+			throw new Exception('The file could not be found');
 		}
 
 		$filename ??= basename($file);
@@ -168,11 +167,10 @@ class Response implements Stringable
 	 */
 	public static function file(string $file, array $props = []): static
 	{
-		$props = [
+		$props = array_merge([
 			'body' => F::read($file),
-			'type' => F::extensionToMime(F::extension($file)),
-			...$props
-		];
+			'type' => F::extensionToMime(F::extension($file))
+		], $props);
 
 		// if we couldn't serve a correct MIME type, force
 		// the browser to display the file as plain text to
@@ -270,23 +268,6 @@ class Response implements Stringable
 			'code' => $code,
 			'headers' => [
 				'Location' => Url::unIdn($location)
-			]
-		]);
-	}
-
-	/**
-	 * Creates a refresh response, which will
-	 * send the visitor to the given location
-	 * after the specified number of seconds.
-	 *
-	 * @since 5.0.3
-	 */
-	public static function refresh(string $location = '/', int $code = 302, int $refresh = 0): static
-	{
-		return new static([
-			'code'    => $code,
-			'headers' => [
-				'Refresh' => $refresh . '; url=' . Url::unIdn($location)
 			]
 		]);
 	}

@@ -24,24 +24,24 @@ trait HasMethods
 	/**
 	 * Calls a registered method class with the
 	 * passed arguments
+	 * @internal
 	 *
 	 * @throws \Kirby\Exception\BadMethodCallException
 	 */
-	protected function callMethod(string $method, array $args = []): mixed
+	public function callMethod(string $method, array $args = []): mixed
 	{
 		$closure = $this->getMethod($method);
 
 		if ($closure === null) {
-			throw new BadMethodCallException(
-				message: 'The method ' . $method . ' does not exist'
-			);
+			throw new BadMethodCallException('The method ' . $method . ' does not exist');
 		}
 
 		return $closure->call($this, ...$args);
 	}
 
 	/**
-	 * Checks if the object has a registered custom method
+	 * Checks if the object has a registered method
+	 * @internal
 	 */
 	public function hasMethod(string $method): bool
 	{

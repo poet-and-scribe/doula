@@ -149,7 +149,7 @@ return [
 
 			// make the first column visible on mobile
 			// if no other mobile columns are defined
-			if (in_array(true, array_column($columns, 'mobile'), true) === false) {
+			if (in_array(true, array_column($columns, 'mobile')) === false) {
 				$columns[array_key_first($columns)]['mobile'] = true;
 			}
 
@@ -166,37 +166,24 @@ return [
 					continue;
 				}
 
-				$value[] = $this->form()->fill(input: $row, passthrough: true)->toFormValues();
+				$value[] = $this->form($row)->values();
 			}
 
 			return $value;
 		},
-		'form' => function () {
-			$this->form ??= new Form(
-				fields: $this->attrs['fields'] ?? [],
-				model: $this->model,
-				language: 'current'
-			);
-
-			return $this->form->reset();
-		}
+		'form' => function (array $values = []) {
+			return new Form([
+				'fields' => $this->attrs['fields'] ?? [],
+				'values' => $values,
+				'model'  => $this->model
+			]);
+		},
 	],
 	'save' => function ($value) {
-		$data     = [];
-		$form     = $this->form();
-		$defaults = $form->defaults();
+		$data = [];
 
-		foreach ($value as $index => $row) {
-			$row = $form
-				->reset()
-				->fill(
-					input: $defaults,
-				)
-				->submit(
-					input: $row,
-					passthrough: true
-				)
-				->toStoredValues();
+		foreach ($value as $row) {
+			$row = $this->form($row)->content();
 
 			// remove frontend helper id
 			unset($row['_id']);
@@ -217,20 +204,19 @@ return [
 			$values = A::wrap($value);
 
 			foreach ($values as $index => $value) {
-				$form = $this->form();
-				$form->fill(input: $value);
+				$form = $this->form($value);
 
 				foreach ($form->fields() as $field) {
 					$errors = $field->errors();
 
 					if (empty($errors) === false) {
-						throw new InvalidArgumentException(
-							key: 'structure.validation',
-							data: [
+						throw new InvalidArgumentException([
+							'key'  => 'structure.validation',
+							'data' => [
 								'field' => $field->label() ?? Str::ucfirst($field->name()),
 								'index' => $index + 1
 							]
-						);
+						]);
 					}
 				}
 			}

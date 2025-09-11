@@ -24,14 +24,11 @@ use SensitiveParameter;
  * @link      https://getkirby.com
  * @copyright Bastian Allgeier
  * @license   https://getkirby.com/license
- *
- * @use \Kirby\Cms\HasSiblings<\Kirby\Cms\Users>
  */
 class User extends ModelWithContent
 {
 	use HasFiles;
 	use HasMethods;
-	use HasModels;
 	use HasSiblings;
 	use UserActions;
 
@@ -42,6 +39,11 @@ class User extends ModelWithContent
 	 * @todo Remove when support for PHP 8.2 is dropped
 	 */
 	public static array $methods = [];
+
+	/**
+	 * Registry with all User models
+	 */
+	public static array $models = [];
 
 	protected UserBlueprint|null $blueprint = null;
 	protected array $credentials;
@@ -61,7 +63,7 @@ class User extends ModelWithContent
 	{
 		// helper function to easily edit values (if not null)
 		// before assigning them to their properties
-		$set = static function (string $key, Closure $callback) use ($props) {
+		$set = function (string $key, Closure $callback) use ($props) {
 			if ($value = $props[$key] ?? null) {
 				$value = $callback($value);
 			}
@@ -74,6 +76,8 @@ class User extends ModelWithContent
 		// so it also gets stored in propertyData prop
 		$props['id'] ??= $this->createId();
 
+		parent::__construct($props);
+
 		$this->id       = $props['id'];
 		$this->email    = $set('email', fn ($email) => Str::lower(trim($email)));
 		$this->language = $set('language', fn ($language) => trim($language));
@@ -81,15 +85,7 @@ class User extends ModelWithContent
 		$this->password = $props['password'] ?? null;
 		$this->role     = $set('role', fn ($role) => Str::lower(trim($role)));
 
-		// Set blueprint before setting content
-		// or translations in the parent constructor.
-		// Otherwise, the blueprint definition cannot be
-		// used when creating the right field values
-		// for the content.
 		$this->setBlueprint($props['blueprint'] ?? null);
-
-		parent::__construct($props);
-
 		$this->setFiles($props['files'] ?? null);
 	}
 
@@ -119,12 +115,11 @@ class User extends ModelWithContent
 	 */
 	public function __debugInfo(): array
 	{
-		return [
-			...$this->toArray(),
+		return array_merge($this->toArray(), [
 			'avatar'  => $this->avatar(),
 			'content' => $this->content(),
 			'role'    => $this->role()
-		];
+		]);
 	}
 
 	/**
@@ -154,11 +149,7 @@ class User extends ModelWithContent
 	public function blueprint(): UserBlueprint
 	{
 		try {
-			return $this->blueprint ??= UserBlueprint::factory(
-				'users/' . $this->role(),
-				'users/default',
-				$this
-			);
+			return $this->blueprint ??= UserBlueprint::factory('users/' . $this->role(), 'users/default', $this);
 		} catch (Exception) {
 			return $this->blueprint ??= new UserBlueprint([
 				'model' => $this,
@@ -171,8 +162,7 @@ class User extends ModelWithContent
 	/**
 	 * Prepares the content for the write method
 	 * @internal
-	 *
-	 * @param string|null $languageCode Not used so far
+	 * @param string $languageCode|null Not used so far
 	 */
 	public function contentFileData(
 		array $data,
@@ -188,6 +178,20 @@ class User extends ModelWithContent
 		);
 
 		return $data;
+	}
+
+	/**
+	 * Filename for the content file
+	 *
+	 * @internal
+	 * @deprecated 4.0.0
+	 * @todo Remove in v5
+	 * @codeCoverageIgnore
+	 */
+	public function contentFileName(): string
+	{
+		Helpers::deprecated('The internal $model->contentFileName() method has been deprecated. Please let us know via a GitHub issue if you need this method and tell us your use case.', 'model-content-file');
+		return 'user';
 	}
 
 	protected function credentials(): array
@@ -208,21 +212,30 @@ class User extends ModelWithContent
 	 */
 	public function exists(): bool
 	{
-		return $this->version('latest')->exists('default');
+		return $this->storage()->exists(
+			'published',
+			'default'
+		);
 	}
 
 	/**
 	 * Constructs a User object and also
-	 * takes User models into account
+	 * takes User models into account.
+	 * @internal
 	 */
 	public static function factory(mixed $props): static
 	{
-		return static::model($props['model'] ?? $props['role'] ?? 'default', $props);
+		if (empty($props['model']) === false) {
+			return static::model($props['model'], $props);
+		}
+
+		return new static($props);
 	}
 
 	/**
-	 * Hashes the provided password unless it is `null`,
+	 * Hashes the user's password unless it is `null`,
 	 * which will leave it as `null`
+	 * @internal
 	 */
 	public static function hashPassword(
 		#[SensitiveParameter]
@@ -363,9 +376,7 @@ class User extends ModelWithContent
 		Session|array|null $session = null
 	): void {
 		if ($this->id() === 'kirby') {
-			throw new PermissionException(
-				message: 'The almighty user "kirby" cannot be used for login, only for raising permissions in code via `$kirby->impersonate()`'
-			);
+			throw new PermissionException('The almighty user "kirby" cannot be used for login, only for raising permissions in code via `$kirby->impersonate()`');
 		}
 
 		$kirby   = $this->kirby();
@@ -424,27 +435,38 @@ class User extends ModelWithContent
 	}
 
 	/**
-	 * Returns the absolute path to the media folder for the user
+	 * Returns the root to the media folder for the user
+	 * @internal
 	 */
-	public function mediaDir(): string
+	public function mediaRoot(): string
 	{
 		return $this->kirby()->root('media') . '/users/' . $this->id();
 	}
 
 	/**
-	 * @see `::mediaDir`
-	 */
-	public function mediaRoot(): string
-	{
-		return $this->mediaDir();
-	}
-
-	/**
 	 * Returns the media url for the user object
+	 * @internal
 	 */
 	public function mediaUrl(): string
 	{
 		return $this->kirby()->url('media') . '/users/' . $this->id();
+	}
+
+	/**
+	 * Creates a user model if it has been registered
+	 * @internal
+	 */
+	public static function model(string $name, array $props = []): static
+	{
+		if ($class = (static::$models[$name] ?? null)) {
+			$object = new $class($props);
+
+			if ($object instanceof self) {
+				return $object;
+			}
+		}
+
+		return new static($props);
 	}
 
 	/**
@@ -455,7 +477,7 @@ class User extends ModelWithContent
 		string|null $handler = null,
 		string|null $languageCode = null
 	): int|string|false {
-		$modifiedContent = $this->version('latest')->modified($languageCode ?? 'current');
+		$modifiedContent = $this->storage()->modified('published', $languageCode);
 		$modifiedIndex   = F::modified($this->root() . '/index.php');
 		$modifiedTotal   = max([$modifiedContent, $modifiedIndex]);
 
@@ -480,11 +502,13 @@ class User extends ModelWithContent
 	 */
 	public function nameOrEmail(): Field
 	{
-		return $this->name()->or(new Field($this, 'email', $this->email()));
+		$name = $this->name();
+		return $name->isNotEmpty() ? $name : new Field($this, 'email', $this->email());
 	}
 
 	/**
 	 * Create a dummy nobody
+	 * @internal
 	 */
 	public static function nobody(): static
 	{
@@ -544,11 +568,9 @@ class User extends ModelWithContent
 			return $this->role;
 		}
 
-		$name = $this->role ?? $this->credentials()['role'] ?? 'default';
+		$name = $this->role ?? $this->credentials()['role'] ?? 'visitor';
 
-		return $this->role =
-			$this->kirby()->roles()->find($name) ??
-			Role::defaultNobody();
+		return $this->role = $this->kirby()->roles()->find($name) ?? Role::nobody();
 	}
 
 	/**
@@ -606,10 +628,8 @@ class User extends ModelWithContent
 	protected function setBlueprint(array|null $blueprint = null): static
 	{
 		if ($blueprint !== null) {
-			$this->blueprint = new UserBlueprint([
-				...$blueprint,
-				'model' => $this
-			]);
+			$blueprint['model'] = $this;
+			$this->blueprint = new UserBlueprint($blueprint);
 		}
 
 		return $this;
@@ -623,10 +643,10 @@ class User extends ModelWithContent
 	protected function sessionFromOptions(Session|array|null $session): Session
 	{
 		// use passed session options or session object if set
-		$session ??= ['detect' => true];
-
-		if ($session instanceof Session === false) {
+		if (is_array($session) === true) {
 			$session = $this->kirby()->session($session);
+		} elseif ($session instanceof Session === false) {
+			$session = $this->kirby()->session(['detect' => true]);
 		}
 
 		return $session;
@@ -646,15 +666,14 @@ class User extends ModelWithContent
 	 */
 	public function toArray(): array
 	{
-		return [
-			...parent::toArray(),
+		return array_merge(parent::toArray(), [
 			'avatar'   => $this->avatar()?->toArray(),
 			'email'    => $this->email(),
 			'id'       => $this->id(),
 			'language' => $this->language(),
 			'role'     => $this->role()->name(),
 			'username' => $this->username()
-		];
+		]);
 	}
 
 	/**
@@ -669,12 +688,8 @@ class User extends ModelWithContent
 		string|null $fallback = '',
 		string $handler = 'template'
 	): string {
-		return parent::toString(
-			$template ?? $this->email(),
-			$data,
-			$fallback,
-			$handler
-		);
+		$template ??= $this->email();
+		return parent::toString($template, $data, $fallback, $handler);
 	}
 
 	/**
@@ -684,7 +699,7 @@ class User extends ModelWithContent
 	 */
 	public function username(): string|null
 	{
-		return $this->nameOrEmail()->value();
+		return $this->name()->or($this->email())->value();
 	}
 
 	/**
@@ -699,34 +714,34 @@ class User extends ModelWithContent
 		string|null $password = null
 	): bool {
 		if (empty($this->password()) === true) {
-			throw new NotFoundException(
-				key: 'user.password.undefined'
-			);
+			throw new NotFoundException(['key' => 'user.password.undefined']);
 		}
 
 		// `UserRules` enforces a minimum length of 8 characters,
 		// so everything below that is a typo
 		if (Str::length($password) < 8) {
-			throw new InvalidArgumentException(
-				key: 'user.password.invalid'
-			);
+			throw new InvalidArgumentException(['key' => 'user.password.invalid']);
 		}
 
 		// too long passwords can cause DoS attacks
 		if (Str::length($password) > 1000) {
-			throw new InvalidArgumentException(
-				key: 'user.password.excessive'
-			);
+			throw new InvalidArgumentException(['key' => 'user.password.excessive']);
 		}
 
 		if (password_verify($password, $this->password()) !== true) {
-			throw new InvalidArgumentException(
-				key: 'user.password.wrong',
-				httpCode: 401
-			);
+			throw new InvalidArgumentException(['key' => 'user.password.wrong', 'httpCode' => 401]);
 		}
 
 		return true;
+	}
+
+	/**
+	 * @deprecated 4.0.0 Use `->secretsFile()` instead
+	 * @codeCoverageIgnore
+	 */
+	protected function passwordFile(): string
+	{
+		return $this->secretsFile();
 	}
 
 	/**

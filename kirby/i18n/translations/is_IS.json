@@ -449,12 +449,7 @@
 	"language.variables.empty": "Engar þýðingar enn",
 
 	"language.variable.delete.confirm": "Ertu viss um að þú viljir nú fjarlægja breytuna fyrir {key}?",
-	"language.variable.entries": "Gildi",
-	"language.variable.entries.help": "Hver strengur verður notaður fyrir samsvarandi fjölda, t.d. þrír strengir munu passa til að telja <code>0</code>, <code>1</code>, <code>2 og fleiri</code>. Notaðu <code>{count}</code> staðgengilinn fyrir raunverulegan fjölda.",
 	"language.variable.key": "Lykill",
-	"language.variable.multiple": "Teljanlegt?",
-	"language.variable.multiple.text": "Notaðu annan textastreng fyrir þýðingu",
-	"language.variable.multiple.help": "Þú getur notað mismunandi gildi eftir því hvaða talningu þú sendir með tungumálabreytunni, sem gerir þér kleift að búa til breytilegar þýðingar, t.d. eintölu og fleirtölu.",
 	"language.variable.notFound": "Breytan fannst hreint ekki",
 	"language.variable.value": "Gildi",
 
